@@ -1,5 +1,6 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import process from 'node:process';
 import Booking from '../models/Booking.js';
 import Transaction from '../models/paymentModel.js';
 import { authenticateToken } from '../middleware/auth.js';
@@ -12,39 +13,46 @@ import { sendBookingConfirmationEmail } from '../utils/bookingEmail.js';
 
 const router = express.Router();
 
-/**
- * POST /api/payments/esewa/initiate
- * Creates a pending booking and returns eSewa form fields for the client to submit.
- */
 router.post('/esewa/initiate', authenticateToken, async (req, res) => {
   try {
-    const { bookingId, clientOrigin } = req.body;
+    const { bookingId } = req.body;
 
     if (!bookingId) {
-      return res.status(400).json({ message: 'Booking ID is required' });
+      return res.status(400).json({ success: false, message: 'Booking ID is required' });
     }
 
     const booking = await Booking.findById(bookingId);
     if (!booking) {
-      return res.status(404).json({ message: 'Booking not found' });
+      return res.status(404).json({ success: false, message: 'Booking not found' });
     }
 
     if (String(booking.user) !== String(req.user._id)) {
-      return res.status(403).json({ message: 'Not authorized' });
+      return res.status(403).json({ success: false, message: 'Not authorized' });
     }
 
+    // Block if payment already completed
     if (booking.paymentStatus === 'completed') {
-      return res.status(400).json({ message: 'Payment already completed for this booking' });
+      return res.status(400).json({ success: false, message: 'Payment already completed for this booking' });
     }
 
-    // Generate unique transaction UUID
-    const transactionUuid = `NS-${booking._id}-${uuidv4().slice(0, 8)}`;
+    // Block if booking was cancelled or failed — must create a new booking
+    if (booking.status === 'cancelled' || booking.status === 'failed') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot initiate payment for a ${booking.status} booking. Please create a new booking.`,
+      });
+    }
+
+    // Generate short unique transaction UUID (eSewa max length is strict)
+    // Date.now() is 13 chars + hyphen + 6 random hex = 20 chars
+    const transactionUuid = `${Date.now()}-${uuidv4().slice(0, 6)}`;
 
     // Save transaction UUID in booking
     booking.transactionId = transactionUuid;
     await booking.save();
 
-    const origin = clientOrigin || process.env.FRONTEND_URL || 'http://localhost:5173';
+    // Use actual request origin for security (not client-provided value)
+    const origin = req.get('origin') || process.env.FRONTEND_URL || 'http://localhost:5173';
     // Note: eSewa will append ?data=<encoded_response> to these URLs
     const successUrl = `${origin}/payment/success`;
     const failureUrl = `${origin}/payment/failure`;
@@ -61,12 +69,13 @@ router.post('/esewa/initiate', authenticateToken, async (req, res) => {
       booking: booking._id,
       user: req.user._id,
       customerDetails: {
-        name: booking.guestName || req.user.name,
-        email: booking.guestEmail || req.user.email,
+        name: booking.guestName || req.user.name || 'Guest',
+        email: booking.guestEmail || req.user.email || '',
         phone: booking.guestPhone || '',
       },
       hotelName: booking.hotelName,
-      hotelId: String(booking.hotel),
+      // Guard against String(null) = "null" — fall back to hotel name if no DB hotel doc
+      hotelId: booking.hotel ? String(booking.hotel) : (booking.hotelName || ''),
       amount: booking.totalPrice,
       payment_gateway: 'esewa',
       status: 'PENDING',
@@ -80,7 +89,7 @@ router.post('/esewa/initiate', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('eSewa initiate error:', error);
-    res.status(500).json({ message: 'Error initiating payment', error: error.message });
+    res.status(500).json({ success: false, message: 'Error initiating payment', error: error.message });
   }
 });
 
@@ -100,14 +109,10 @@ router.get('/esewa/verify', async (req, res) => {
         message: 'Missing eSewa response data. Payment verification cannot proceed.' 
       });
     }
-
-    console.log('Verifying eSewa payment with encoded data:', encodedData.substring(0, 20) + '...');
     
     const result = verifyEsewaPayment(encodedData);
 
     if (!result.verified) {
-      console.warn('Payment verification failed:', result.error);
-      
       return res.status(400).json({
         success: false,
         message: result.error || 'Payment verification failed. Please contact support if money was deducted.',
@@ -115,14 +120,12 @@ router.get('/esewa/verify', async (req, res) => {
     }
 
     const paymentData = result.data;
-    console.log('Payment data verified:', paymentData);
     
     const transactionUuid = paymentData.transaction_uuid;
 
     // Find the booking by transaction UUID
     const booking = await Booking.findOne({ transactionId: transactionUuid });
     if (!booking) {
-      console.error('Booking not found for transaction UUID:', transactionUuid);
       return res.status(404).json({ 
         success: false,
         message: 'Booking not found for this transaction. Please contact support.' 
@@ -131,13 +134,16 @@ router.get('/esewa/verify', async (req, res) => {
 
     // Check if already completed to prevent duplicate confirmation
     if (booking.paymentStatus === 'completed') {
-      console.warn('Booking already completed:', booking._id);
       return res.status(200).json({
         success: true,
         message: 'Payment already verified and booking confirmed',
         booking: {
           id: booking._id,
           hotelName: booking.hotelName,
+          roomType: booking.roomType,
+          checkIn: booking.checkIn,
+          checkOut: booking.checkOut,
+          guests: booking.guests,
           status: booking.status,
           paymentStatus: booking.paymentStatus,
           totalPrice: booking.totalPrice,
@@ -146,12 +152,19 @@ router.get('/esewa/verify', async (req, res) => {
       });
     }
 
+    // If booking was cancelled or failed, we cannot re-confirm it via payment
+    if (booking.status === 'cancelled' || booking.status === 'failed') {
+      return res.status(400).json({
+        success: false,
+        message: `This booking was ${booking.status} and cannot be confirmed. Please contact support if money was deducted.`,
+      });
+    }
+
     // Update booking to confirmed
     booking.status = 'confirmed';
     booking.paymentStatus = 'completed';
     booking.esewaRefId = paymentData.transaction_code || paymentData.ref_id || '';
     await booking.save();
-    console.log('Booking confirmed:', booking._id);
 
     // Update transaction record
     await Transaction.findOneAndUpdate(
@@ -183,9 +196,7 @@ router.get('/esewa/verify', async (req, res) => {
           province: booking.province,
         },
       });
-      console.log('Confirmation email sent to:', booking.guestEmail);
-    } catch (emailErr) {
-      console.error('Booking confirmation email failed:', emailErr.message);
+    } catch {
       // Don't fail the payment verification if email fails
     }
 
@@ -235,7 +246,6 @@ router.get('/esewa/failure', async (req, res) => {
             booking.status = 'failed';
             booking.paymentStatus = 'failed';
             await booking.save();
-            console.log('Booking marked as failed:', booking._id);
           }
 
           // Update transaction
@@ -244,8 +254,8 @@ router.get('/esewa/failure', async (req, res) => {
             { status: 'FAILED', verifiedAt: new Date() }
           );
         }
-      } catch (parseErr) {
-        console.warn('Could not parse eSewa failure data:', parseErr.message);
+      } catch {
+        // Silently handle parse errors for failure endpoint
       }
     }
 

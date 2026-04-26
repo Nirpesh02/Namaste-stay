@@ -209,6 +209,7 @@ export default function HotelDetails() {
 
       // Step 3: Redirect to eSewa payment gateway
       setShowBookingModal(false);
+      localStorage.setItem('pendingEsewaBookingId', booking._id);
       redirectToEsewa({
         paymentUrl: paymentResult.paymentUrl,
         fields: paymentResult.fields,

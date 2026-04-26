@@ -13,9 +13,23 @@ export default function PaymentSuccess() {
   const [error, setError] = useState("");
   const [retrying, setRetrying] = useState(false);
 
-  const verifyPayment = async (retryCount = 0) => {
+  /**
+   * eSewa appends ?data=<base64> to the success URL without URL-encoding the '+' chars.
+   * Standard URLSearchParams.get() decodes '+' as a space, corrupting base64 data.
+   * We use the raw query string and decode only %xx sequences, not '+' → space.
+   */
+  const getRawDataParam = () => {
+    const raw = window.location.search; // e.g. "?data=abc+def%3D"
+    const match = raw.match(/[?&]data=([^&]*)/);
+    if (!match) return null;
+    // Only decode %XX, keep '+' as-is (base64 uses '+' not space)
+    return decodeURIComponent(match[1].replace(/%(?![0-9A-Fa-f]{2})/g, '%25'));
+  };
+
+  const verifyPayment = async () => {
     try {
-      const encodedData = searchParams.get("data");
+      // Use raw param extraction to avoid '+' being decoded as space by URLSearchParams
+      const encodedData = getRawDataParam() || searchParams.get("data");
 
       if (!encodedData) {
         setStatus("error");
@@ -23,13 +37,14 @@ export default function PaymentSuccess() {
         return;
       }
 
-      console.log('Verifying payment with data:', encodedData.substring(0, 20) + '...');
+      console.log('Verifying payment with data (first 30 chars):', encodedData.substring(0, 30) + '...');
 
       // Call backend verify endpoint
       const result = await AuthAPI.verifyEsewaPayment(encodedData);
 
       if (result.success && result.booking) {
         console.log('Payment verified successfully:', result.booking);
+        localStorage.removeItem('pendingEsewaBookingId');
         setBooking(result.booking);
         setStatus("success");
         
@@ -40,7 +55,7 @@ export default function PaymentSuccess() {
           console.warn('Could not refresh bookings:', fetchErr.message);
         }
       } else {
-        console.error('Payment verification failed:', result.message);
+        console.error('Payment verification failed:', result);
         setStatus("error");
         setError(result.message || "Payment verification failed. Please contact support.");
       }
@@ -52,8 +67,16 @@ export default function PaymentSuccess() {
   };
 
   useEffect(() => {
-    verifyPayment();
-  }, [searchParams]);
+    // Extract data once at mount — don't re-run when searchParams object reference changes
+    const encodedData = getRawDataParam() || searchParams.get("data");
+    if (encodedData) {
+      verifyPayment();
+    } else {
+      setStatus("error");
+      setError("No payment data received from eSewa. Please contact support if you were charged.");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleRetry = async () => {
     setRetrying(true);

@@ -1,13 +1,25 @@
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { XCircle, ArrowLeft, Home, RefreshCw, AlertTriangle, Clock } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function PaymentFailure() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { fetchBookings } = useAuth();
+  const { fetchBookings, deleteIncompleteBooking } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
+
+  // When mounting, see if we have a bookingId and delete it.
+  // We don't block the UI for this, we just trigger it in the background.
+  useEffect(() => {
+    const bookingId = localStorage.getItem('pendingEsewaBookingId');
+    if (bookingId) {
+      deleteIncompleteBooking(bookingId).catch(err => {
+        console.error('Failed to clean up incomplete booking:', err);
+      });
+      localStorage.removeItem('pendingEsewaBookingId');
+    }
+  }, [deleteIncompleteBooking]);
 
   const handleRefreshBookings = async () => {
     setRefreshing(true);

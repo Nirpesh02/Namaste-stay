@@ -22,7 +22,8 @@ const transactionSchema = new mongoose.Schema({
   },
   hotelId: {
     type: String,
-    required: true,
+    required: false,
+    default: '',
   },
   amount: {
     type: Number,

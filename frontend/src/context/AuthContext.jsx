@@ -205,6 +205,21 @@ export default function AuthProvider({ children }) {
     }
   };
 
+  // Delete Incomplete Booking (backend)
+  const deleteIncompleteBooking = async (bookingId) => {
+    if (!token) return;
+    try {
+      const result = await AuthAPI.deleteIncompleteBooking(token, bookingId);
+      if (result.success) {
+        setBookings(prev => prev.filter(b => b._id !== bookingId && b.id !== bookingId));
+      }
+      return result;
+    } catch (error) {
+      console.error("Error deleting incomplete booking:", error);
+      return { success: false, message: error.message };
+    }
+  };
+
   // Update Profile Picture (manual)
   const updateProfilePicture = async (profilePictureUrl) => {
     try {
@@ -253,6 +268,7 @@ export default function AuthProvider({ children }) {
     createBooking,
     fetchBookings,
     cancelBooking,
+    deleteIncompleteBooking,
     updateProfilePicture,
     refreshProfilePictureFromGoogle,
     isAuthenticated: !!token && !!user,

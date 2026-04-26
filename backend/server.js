@@ -57,21 +57,25 @@ const initDB = async () => {
 };
 initDB();
 
-// Clean up expired 'awaiting_payment' bookings on startup and every hour
 const cleanupExpiredBookings = async () => {
   try {
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    const result = await Booking.updateMany(
-      {
-        status: 'awaiting_payment',
-        createdAt: { $lt: oneHourAgo }
-      },
-      {
-        status: 'failed',
-        paymentStatus: 'failed'
-      }
-    );
-    console.log(`[Cleanup] Marked ${result.modifiedCount} expired awaiting_payment bookings as failed`);
+    // Find bookings that have been pending for over an hour
+    const expiredBookings = await Booking.find({
+      status: 'awaiting_payment',
+      createdAt: { $lt: oneHourAgo }
+    });
+
+    if (expiredBookings.length > 0) {
+      const bookingIds = expiredBookings.map(b => b._id);
+      
+      // Delete the bookings
+      const bResult = await Booking.deleteMany({ _id: { $in: bookingIds } });
+      // Delete the corresponding transactions
+      const tResult = await (await import('./models/paymentModel.js')).default.deleteMany({ booking: { $in: bookingIds } });
+      
+      console.log(`[Cleanup] Deleted ${bResult.deletedCount} expired unpaid bookings and ${tResult.deletedCount} transactions`);
+    }
   } catch (error) {
     console.error('[Cleanup] Error cleaning up expired bookings:', error.message);
   }

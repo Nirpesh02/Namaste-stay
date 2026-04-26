@@ -200,6 +200,15 @@ class AuthAPI {
     });
   }
 
+  static async deleteIncompleteBooking(token, bookingId) {
+    return safeRequest(`/bookings/${bookingId}/incomplete`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+  }
+
   static async cancelBooking(token, id) {
     return safeRequest(`/bookings/${id}/cancel`, {
       method: 'PUT',
@@ -218,9 +227,11 @@ class AuthAPI {
   }
 
   static async verifyEsewaPayment(encodedData, bookingId) {
-    const params = new URLSearchParams({ data: encodedData });
-    if (bookingId) params.append('bookingId', bookingId);
-    return safeRequest(`/payments/esewa/verify?${params.toString()}`);
+    // Use encodeURIComponent to properly encode '+' chars in base64 as %2B
+    // URLSearchParams would also encode them, but this makes the intent explicit
+    let url = `/payments/esewa/verify?data=${encodeURIComponent(encodedData)}`;
+    if (bookingId) url += `&bookingId=${encodeURIComponent(bookingId)}`;
+    return safeRequest(url);
   }
 
   // ===== ADMIN APIs =====

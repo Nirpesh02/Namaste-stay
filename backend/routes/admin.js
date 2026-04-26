@@ -70,20 +70,22 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
       totalHotels,
       totalBookings,
       confirmedBookings,
-      pendingBookings,
       cancelledBookings,
+      awaitingPaymentBookings,
       allBookings,
       recentBookings,
       totalTransactions,
     ] = await Promise.all([
       User.countDocuments({ accountType: { $ne: 'admin' } }),
       Hotel.countDocuments(),
-      Booking.countDocuments(),
+      // Total bookings = only confirmed (real, paid bookings)
       Booking.countDocuments({ status: 'confirmed' }),
-      Booking.countDocuments({ status: 'pending' }),
+      Booking.countDocuments({ status: 'confirmed' }),
       Booking.countDocuments({ status: 'cancelled' }),
+      Booking.countDocuments({ status: 'awaiting_payment' }),
       Booking.find({ paymentStatus: 'completed' }).select('totalPrice createdAt'),
-      Booking.find()
+      // Recent bookings: only show confirmed bookings
+      Booking.find({ status: 'confirmed' })
         .sort({ createdAt: -1 })
         .limit(10)
         .populate('user', 'name email')
@@ -113,10 +115,10 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
       });
     }
 
-    // Booking status distribution for pie chart
+    // Booking status distribution for donut chart
     const statusDistribution = {
       confirmed: confirmedBookings,
-      pending: pendingBookings,
+      awaiting_payment: awaitingPaymentBookings,
       cancelled: cancelledBookings,
       failed: await Booking.countDocuments({ status: 'failed' }),
     };
@@ -126,9 +128,9 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
       stats: {
         totalUsers,
         totalHotels,
-        totalBookings,
+        totalBookings,      // confirmed bookings only
         confirmedBookings,
-        pendingBookings,
+        awaitingPaymentBookings,
         cancelledBookings,
         totalRevenue,
         totalTransactions,

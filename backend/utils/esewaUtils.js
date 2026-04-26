@@ -29,9 +29,9 @@ const getConfig = () => {
 export const generateEsewaSignature = (totalAmount, transactionUuid, productCode) => {
   const config = getConfig();
   
-  // Format amount as decimal with proper precision
+  // Format amount cleanly without forcing .00 if it's an integer
   const amountNum = typeof totalAmount === 'string' ? parseFloat(totalAmount) : totalAmount;
-  const amountStr = amountNum.toFixed(2); // Ensure .00 format
+  const amountStr = amountNum.toString(); 
   
   const uuidStr = String(transactionUuid).trim();
   const codeStr = String(productCode || config.merchantCode).trim();
@@ -39,14 +39,9 @@ export const generateEsewaSignature = (totalAmount, transactionUuid, productCode
   // Create the exact message eSewa expects
   const message = `total_amount=${amountStr},transaction_uuid=${uuidStr},product_code=${codeStr}`;
   
-  console.log('Signature message:', message);
-  console.log('Secret key:', config.secretKey);
-  
   const hmac = crypto.createHmac('sha256', config.secretKey);
   hmac.update(message);
   const signature = hmac.digest('base64');
-  
-  console.log('Generated signature:', signature);
   
   return signature;
 };
@@ -75,8 +70,8 @@ export const buildEsewaPaymentFields = ({
   
   const totalAmount = amountNum + taxNum + chargeNum + deliveryNum;
 
-  // Format amount with .00 for eSewa
-  const totalAmountStr = totalAmount.toFixed(2);
+  // Format amount cleanly
+  const totalAmountStr = totalAmount.toString();
   const transactionUuidStr = String(transactionUuid).trim();
   const productCodeStr = String(code).trim();
 
@@ -84,13 +79,13 @@ export const buildEsewaPaymentFields = ({
   const signature = generateEsewaSignature(totalAmountStr, transactionUuidStr, productCodeStr);
 
   return {
-    amount: amountNum.toFixed(2),
-    tax_amount: taxNum.toFixed(2),
+    amount: amountNum.toString(),
+    tax_amount: taxNum.toString(),
     total_amount: totalAmountStr,
     transaction_uuid: transactionUuidStr,
     product_code: productCodeStr,
-    product_service_charge: chargeNum.toFixed(2),
-    product_delivery_charge: deliveryNum.toFixed(2),
+    product_service_charge: chargeNum.toString(),
+    product_delivery_charge: deliveryNum.toString(),
     success_url: successUrl,
     failure_url: failureUrl,
     signed_field_names: 'total_amount,transaction_uuid,product_code',
@@ -103,7 +98,10 @@ export const buildEsewaPaymentFields = ({
  */
 export const verifyEsewaPayment = (encodedData) => {
   try {
-    const decodedString = Buffer.from(encodedData, 'base64').toString('utf-8');
+    // Defensive: eSewa's base64 may have '+' that got URL-decoded to spaces
+    // Repair by converting spaces back to '+' before base64 decoding
+    const safeEncoded = String(encodedData).replace(/ /g, '+');
+    const decodedString = Buffer.from(safeEncoded, 'base64').toString('utf-8');
     const data = JSON.parse(decodedString);
 
     const config = getConfig();
@@ -122,14 +120,6 @@ export const verifyEsewaPayment = (encodedData) => {
     hmac.update(message);
     const expectedSignature = hmac.digest('base64');
 
-    console.log('Verification Message:', message);
-    console.log('Response data:', {
-      status: data.status,
-      transaction_uuid: data.transaction_uuid,
-      received_signature: data.signature,
-      expected_signature: expectedSignature,
-    });
-
     if (expectedSignature !== data.signature) {
       console.error('Signature mismatch!');
       return { verified: false, error: 'Signature mismatch', data };
@@ -141,7 +131,6 @@ export const verifyEsewaPayment = (encodedData) => {
 
     return { verified: true, data };
   } catch (error) {
-    console.error('Payment verification error:', error);
     return { verified: false, error: error.message, data: null };
   }
 };

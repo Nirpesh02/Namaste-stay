@@ -54,30 +54,36 @@ router.post('/', authenticateToken, async (req, res) => {
     // Calculate nights
     const nights = Math.max(1, Math.round((checkOutDate - checkInDate) / (1000 * 60 * 60 * 24)));
 
-    // Try to find hotel by name (case-insensitive match)
+    // Try to find hotel by ObjectId first, then by name
     let hotelObjectId = null;
     try {
-      const hotelDoc = await Hotel.findOne({ name: { $regex: new RegExp(`^${hotelName}$`, 'i') } });
-      if (hotelDoc) {
-        hotelObjectId = hotelDoc._id;
+      // Try parsing hotelId as a MongoDB ObjectId
+      const mongoose = (await import('mongoose')).default;
+      if (mongoose.Types.ObjectId.isValid(hotelId)) {
+        const hotelDoc = await Hotel.findById(hotelId);
+        if (hotelDoc) hotelObjectId = hotelDoc._id;
+      }
+      // Fallback: find by hotel name (case-insensitive)
+      if (!hotelObjectId) {
+        const hotelDoc = await Hotel.findOne({ name: { $regex: new RegExp(`^${hotelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } });
+        if (hotelDoc) hotelObjectId = hotelDoc._id;
       }
     } catch (err) {
       console.log('Hotel lookup failed:', err.message);
     }
 
-    // Check for overlapping bookings (exclude awaiting_payment and cancelled/failed bookings)
+    // Check for overlapping confirmed bookings for the same hotel + room type (across all users)
     const overlapping = await Booking.findOne({
       hotelName,
       roomType,
       status: 'confirmed',
       checkIn: { $lt: checkOutDate },
       checkOut: { $gt: checkInDate },
-      user: req.user._id,
     });
 
     if (overlapping) {
       return res.status(409).json({
-        message: `You already have a booking for this room type from ${overlapping.checkIn.toISOString().split('T')[0]} to ${overlapping.checkOut.toISOString().split('T')[0]}`,
+        message: `This room type is already booked from ${overlapping.checkIn.toISOString().split('T')[0]} to ${overlapping.checkOut.toISOString().split('T')[0]}. Please choose different dates or a different room type.`,
       });
     }
 
@@ -117,13 +123,18 @@ router.post('/', authenticateToken, async (req, res) => {
 });
 
 // GET /api/bookings - Get current user's bookings
+// Only returns bookings that are CONFIRMED or CANCELLED — awaiting_payment/failed are hidden
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const { page = 1, limit = 20, status } = req.query;
 
     const filter = { user: req.user._id };
     if (status) {
+      // Allow explicit status filter (e.g. ?status=confirmed)
       filter.status = status;
+    } else {
+      // Default: only show bookings the user should see (paid or cancelled)
+      filter.status = { $in: ['confirmed', 'cancelled', 'completed'] };
     }
 
     const pageNum = Math.max(1, parseInt(page));
@@ -154,12 +165,18 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // GET /api/bookings/all - Get all bookings (admin only)
+// Excludes awaiting_payment by default — admin sees only real (paid/cancelled) bookings
 router.get('/all', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const { page = 1, limit = 50, status, paymentStatus } = req.query;
+    const { page = 1, limit = 50, status, paymentStatus, includeAll } = req.query;
 
     const filter = {};
-    if (status) filter.status = status;
+    if (status) {
+      filter.status = status;
+    } else if (!includeAll) {
+      // Default: hide pending payment bookings from admin list
+      filter.status = { $nin: ['awaiting_payment', 'failed'] };
+    }
     if (paymentStatus) filter.paymentStatus = paymentStatus;
 
     const pageNum = Math.max(1, parseInt(page));
@@ -191,6 +208,7 @@ router.get('/all', authenticateToken, requireAdmin, async (req, res) => {
 });
 
 // GET /api/bookings/owner - Get all bookings for an owner's hotels
+// Excludes awaiting_payment by default
 router.get('/owner', authenticateToken, requireOwnerOrAdmin, async (req, res) => {
   try {
     const { page = 1, limit = 50, status } = req.query;
@@ -200,7 +218,11 @@ router.get('/owner', authenticateToken, requireOwnerOrAdmin, async (req, res) =>
     const hotelIds = ownerHotels.map(h => h._id);
 
     const filter = { hotel: { $in: hotelIds } };
-    if (status) filter.status = status;
+    if (status) {
+      filter.status = status;
+    } else {
+      filter.status = { $nin: ['awaiting_payment', 'failed'] };
+    }
 
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
@@ -303,6 +325,41 @@ router.put('/:id/cancel', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: 'Error cancelling booking', error: error.message });
+  }
+});
+
+// DELETE /api/bookings/:id/incomplete - Delete an incomplete booking (payment failed/cancelled)
+router.delete('/:id/incomplete', authenticateToken, async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id);
+
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+
+    // Only allow user to delete their own booking
+    if (String(booking.user) !== String(req.user._id)) {
+      return res.status(403).json({ message: 'Not authorized' });
+    }
+
+    // Only allow deleting if it's unpaid
+    if (booking.status !== 'awaiting_payment' && booking.paymentStatus !== 'failed' && booking.status !== 'failed') {
+      return res.status(400).json({ message: 'Cannot delete a confirmed or completed booking' });
+    }
+
+    await Booking.findByIdAndDelete(req.params.id);
+    
+    // Also try to delete any associated transactions
+    try {
+      const Transaction = (await import('../models/paymentModel.js')).default;
+      await Transaction.deleteMany({ booking: req.params.id });
+    } catch (e) {
+      console.log('Error deleting associated transactions:', e.message);
+    }
+
+    res.json({ success: true, message: 'Incomplete booking removed' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error deleting booking', error: error.message });
   }
 });
 

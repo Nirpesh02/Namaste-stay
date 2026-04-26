@@ -247,7 +247,7 @@ export default function AdminDashboard() {
                     <h3 className="text-lg font-bold text-gray-900 mb-4">Booking Status</h3>
                     <DonutChart segments={[
                       { label: "Confirmed", value: statusDist.confirmed || 0, color: "#16a34a" },
-                      { label: "Pending", value: statusDist.pending || 0, color: "#eab308" },
+                      { label: "Awaiting Payment", value: statusDist.awaiting_payment || 0, color: "#eab308" },
                       { label: "Cancelled", value: statusDist.cancelled || 0, color: "#dc2626" },
                       { label: "Failed", value: statusDist.failed || 0, color: "#6b7280" },
                     ]} />
