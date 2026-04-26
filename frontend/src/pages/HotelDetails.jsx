@@ -6,6 +6,7 @@ import { useReview } from "../context/ReviewContext";
 import { provincesData } from "../data/provincesData";
 import ReviewModal from "../components/ReviewModal";
 import { initiateEsewaPayment, redirectToEsewa } from "../services/esewa";
+import AuthAPI from "../services/AuthAPI";
 
 export default function HotelDetails() {
   const navigate = useNavigate();
@@ -17,6 +18,8 @@ export default function HotelDetails() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
+  const [availabilityInfo, setAvailabilityInfo] = useState(null);
+  const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [bookingData, setBookingData] = useState({
     checkIn: "",
     checkOut: "",
@@ -119,6 +122,12 @@ export default function HotelDetails() {
       }
 
       setBookingData(newBookingData);
+      // Check availability after setting new dates
+      setTimeout(() => {
+        if (newBookingData.checkOut) {
+          checkAvailability();
+        }
+      }, 0);
     } else if (name === "checkOut") {
       // Validate check-out is not in the past
       if (value && value < getTodayDate()) {
@@ -136,11 +145,21 @@ export default function HotelDetails() {
         ...prev,
         [name]: value
       }));
+      // Check availability after setting new dates
+      setTimeout(() => {
+        checkAvailability();
+      }, 0);
     } else {
       setBookingData(prev => ({
         ...prev,
         [name]: value
       }));
+      // Check availability when room type or guests change
+      if (name === "roomType" || name === "guests") {
+        setTimeout(() => {
+          checkAvailability();
+        }, 0);
+      }
     }
   };
 
@@ -154,6 +173,30 @@ export default function HotelDetails() {
     const nights = Math.max(1, (checkOut - checkIn) / (1000 * 60 * 60 * 24));
     
     return pricePerNight * nights;
+  };
+
+  // Check room availability when dates or guests change
+  const checkAvailability = async () => {
+    if (!bookingData.checkIn || !bookingData.checkOut || !hotelName) return;
+
+    setCheckingAvailability(true);
+    try {
+      const result = await AuthAPI.checkRoomAvailability(
+        hotelName,
+        bookingData.roomType,
+        bookingData.checkIn,
+        bookingData.checkOut,
+        bookingData.guests
+      );
+
+      if (result.success) {
+        setAvailabilityInfo(result.availability);
+      }
+    } catch (error) {
+      console.error('Error checking availability:', error);
+    } finally {
+      setCheckingAvailability(false);
+    }
   };
 
   const handleConfirmBooking = async () => {
@@ -216,7 +259,14 @@ export default function HotelDetails() {
       });
     } catch (error) {
       setPaymentLoading(false);
-      alert(error.message || "Failed to process payment. Please try again.");
+      // Check if this is an availability error
+      if (error.message && error.message.includes("room")) {
+        // Re-check availability and show the status
+        await checkAvailability();
+        alert(`Availability issue: ${error.message}\n\nPlease try different dates or room types.`);
+      } else {
+        alert(error.message || "Failed to process payment. Please try again.");
+      }
     }
   };
 
@@ -415,6 +465,30 @@ export default function HotelDetails() {
                     </button>
                   ))}
                 </div>
+
+                {/* Availability Status */}
+                {bookingData.checkIn && bookingData.checkOut && (
+                  <div className="mt-4 p-4 rounded-lg border-2 border-blue-200 bg-blue-50">
+                    {checkingAvailability ? (
+                      <div className="flex items-center gap-2 text-blue-700">
+                        <Loader size={18} className="animate-spin" />
+                        <span className="text-sm font-semibold">Checking availability...</span>
+                      </div>
+                    ) : availabilityInfo ? (
+                      <div>
+                        <p className={`text-sm font-semibold ${availabilityInfo.available ? 'text-green-700' : 'text-red-700'}`}>
+                          {availabilityInfo.available 
+                            ? `✓ ${availabilityInfo.availableRooms} room(s) available` 
+                            : `✗ ${availabilityInfo.message}`
+                          }
+                        </p>
+                        <p className="text-xs text-gray-600 mt-1">
+                          {availabilityInfo.totalRooms} room(s) of this type • {bookingData.guests} guest(s)
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
               </div>
 
               {/* Guest Reviews Section */}

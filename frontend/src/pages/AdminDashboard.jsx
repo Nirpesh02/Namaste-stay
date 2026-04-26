@@ -140,6 +140,9 @@ export default function AdminDashboard() {
       setHotels(prev => [...prev, res.hotel]);
       setNewHotel({ name: "", price: "", district: "", province: "", description: "" });
       setShowAddHotel(false);
+      // Reload dashboard stats to update totalHotels count
+      const dashRes = await AuthAPI.getAdminDashboard(token);
+      if (dashRes.success) setStats(dashRes.stats);
       alert("Hotel added!");
     } else { alert(res.message); }
   };
@@ -147,7 +150,12 @@ export default function AdminDashboard() {
   const handleDeleteHotel = async (id) => {
     if (!confirm("Delete this hotel?")) return;
     const res = await AuthAPI.deleteHotel(token, id);
-    if (res.success) setHotels(prev => prev.filter(h => h._id !== id));
+    if (res.success) {
+      setHotels(prev => prev.filter(h => h._id !== id));
+      // Reload dashboard stats to update totalHotels count
+      const dashRes = await AuthAPI.getAdminDashboard(token);
+      if (dashRes.success) setStats(dashRes.stats);
+    }
     else alert(res.message);
   };
 
@@ -166,6 +174,18 @@ export default function AdminDashboard() {
     const res = await AuthAPI.changeAdminPassword(token, pwForm.current, pwForm.new);
     setPwMsg(res.success ? "Password changed!" : res.message);
     if (res.success) setPwForm({ current: "", new: "", confirm: "" });
+  };
+
+  const handleDeleteBooking = async (bookingId) => {
+    if (!confirm("Are you sure you want to permanently delete this booking? This cannot be undone.")) return;
+    
+    const res = await AuthAPI.deleteBooking(token, bookingId);
+    if (res.success) {
+      setAllBookings(prev => prev.filter(b => b._id !== bookingId));
+      alert("Booking deleted successfully!");
+    } else {
+      alert(res.message || "Failed to delete booking");
+    }
   };
 
   const handleLogout = () => { logout(); navigate("/"); };
@@ -347,7 +367,7 @@ export default function AdminDashboard() {
                     <table className="w-full text-sm">
                       <thead><tr className="bg-gray-50 text-left text-gray-500 border-b">
                         <th className="px-4 py-3">Guest</th><th className="px-4 py-3">Hotel</th><th className="px-4 py-3">Check-In</th><th className="px-4 py-3">Check-Out</th>
-                        <th className="px-4 py-3">Amount</th><th className="px-4 py-3">Payment</th><th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3">Amount</th><th className="px-4 py-3">Payment</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Action</th>
                       </tr></thead>
                       <tbody>
                         {allBookings.map(b => (
@@ -359,6 +379,11 @@ export default function AdminDashboard() {
                             <td className="px-4 py-3 font-semibold">NPR {b.totalPrice?.toLocaleString()}</td>
                             <td className="px-4 py-3"><span className={`px-2 py-1 rounded-full text-xs font-semibold ${b.paymentStatus === 'completed' ? 'bg-green-100 text-green-700' : b.paymentStatus === 'failed' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{b.paymentStatus}</span></td>
                             <td className="px-4 py-3"><span className={`px-2 py-1 rounded-full text-xs font-semibold ${b.status === 'confirmed' ? 'bg-green-100 text-green-700' : b.status === 'cancelled' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{b.status}</span></td>
+                            <td className="px-4 py-3">
+                              <button onClick={() => handleDeleteBooking(b._id)} className="px-3 py-1.5 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 text-xs font-semibold flex items-center gap-1">
+                                <Trash2 size={14} /> Delete
+                              </button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>

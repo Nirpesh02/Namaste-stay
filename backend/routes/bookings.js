@@ -2,6 +2,7 @@ import express from 'express';
 import Booking from '../models/Booking.js';
 import Hotel from '../models/Hotel.js';
 import { authenticateToken, requireAdmin } from '../middleware/auth.js';
+import { checkRoomAvailability, getHotelAvailability } from '../utils/roomAvailability.js';
 
 const router = express.Router();
 
@@ -72,18 +73,20 @@ router.post('/', authenticateToken, async (req, res) => {
       console.log('Hotel lookup failed:', err.message);
     }
 
-    // Check for overlapping confirmed bookings for the same hotel + room type (across all users)
-    const overlapping = await Booking.findOne({
+    // Check for exact duplicate bookings
+    // Only prevent booking if ALL parameters match: hotel + date + room type + guest count
+    const duplicateBooking = await Booking.findOne({
       hotelName,
       roomType,
-      status: 'confirmed',
-      checkIn: { $lt: checkOutDate },
-      checkOut: { $gt: checkInDate },
+      checkIn: checkInDate,
+      checkOut: checkOutDate,
+      guests: Number(guests),
+      status: 'confirmed', // Only check against confirmed bookings
     });
 
-    if (overlapping) {
+    if (duplicateBooking) {
       return res.status(409).json({
-        message: `This room type is already booked from ${overlapping.checkIn.toISOString().split('T')[0]} to ${overlapping.checkOut.toISOString().split('T')[0]}. Please choose different dates or a different room type.`,
+        message: `This exact booking already exists: ${hotelName}, ${roomType}, ${guests} guest(s), ${checkIn} to ${checkOut}. Please choose different parameters.`,
       });
     }
 
@@ -308,4 +311,80 @@ router.delete('/:id/incomplete', authenticateToken, async (req, res) => {
   }
 });
 
+// DELETE /api/bookings/:id - Delete any booking (admin only)
+router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id);
+
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+
+    await Booking.findByIdAndDelete(req.params.id);
+    
+    // Also try to delete any associated transactions
+    try {
+      const Transaction = (await import('../models/paymentModel.js')).default;
+      await Transaction.deleteMany({ booking: req.params.id });
+    } catch (e) {
+      console.log('Error deleting associated transactions:', e.message);
+    }
+
+    res.json({ success: true, message: 'Booking deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error deleting booking', error: error.message });
+  }
+});
+
+// GET /api/bookings/availability/check - Check room availability for specific dates and guests
+router.get('/availability/check', async (req, res) => {
+  try {
+    const { hotelName, roomType, checkIn, checkOut, guests } = req.query;
+
+    if (!hotelName || !roomType || !checkIn || !checkOut || !guests) {
+      return res.status(400).json({ 
+        message: 'Missing required parameters: hotelName, roomType, checkIn, checkOut, guests' 
+      });
+    }
+
+    const checkInDate = new Date(checkIn);
+    const checkOutDate = new Date(checkOut);
+
+    const availability = await checkRoomAvailability(hotelName, roomType, checkInDate, checkOutDate, Number(guests));
+
+    res.json({
+      success: true,
+      availability,
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error checking availability', error: error.message });
+  }
+});
+
+// GET /api/bookings/availability/hotel - Get full hotel availability for specific dates and guest count
+router.get('/availability/hotel', async (req, res) => {
+  try {
+    const { hotelName, checkIn, checkOut, guests } = req.query;
+
+    if (!hotelName || !checkIn || !checkOut || !guests) {
+      return res.status(400).json({ 
+        message: 'Missing required parameters: hotelName, checkIn, checkOut, guests' 
+      });
+    }
+
+    const checkInDate = new Date(checkIn);
+    const checkOutDate = new Date(checkOut);
+
+    const availability = await getHotelAvailability(hotelName, checkInDate, checkOutDate, Number(guests));
+
+    res.json({
+      success: true,
+      availability,
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error checking hotel availability', error: error.message });
+  }
+});
+
 export default router;
+

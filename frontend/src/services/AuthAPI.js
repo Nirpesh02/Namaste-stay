@@ -209,6 +209,37 @@ class AuthAPI {
     });
   }
 
+  // Delete a booking (admin only)
+  static async deleteBooking(token, id) {
+    return safeRequest(`/bookings/${id}`, {
+      method: 'DELETE',
+      headers: authHeaders(token),
+    });
+  }
+
+  // Check availability for a specific room type
+  static async checkRoomAvailability(hotelName, roomType, checkIn, checkOut, guests) {
+    const params = new URLSearchParams({
+      hotelName,
+      roomType,
+      checkIn,
+      checkOut,
+      guests,
+    });
+    return safeRequest(`/bookings/availability/check?${params}`);
+  }
+
+  // Get all available room types for a hotel for specific dates
+  static async checkHotelAvailability(hotelName, checkIn, checkOut, guests) {
+    const params = new URLSearchParams({
+      hotelName,
+      checkIn,
+      checkOut,
+      guests,
+    });
+    return safeRequest(`/bookings/availability/hotel?${params}`);
+  }
+
   // ===== PAYMENT APIs =====
 
   static async initiateEsewaPayment(token, bookingId, clientOrigin) {
