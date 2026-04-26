@@ -7,7 +7,6 @@ import Listings from "./pages/Listings";
 import HotelDetails from "./pages/HotelDetails";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
-import OwnerDashboard from "./pages/OwnerDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import Favorites from "./pages/Favorites";
 import PaymentSuccess from "./pages/PaymentSuccess";
@@ -18,7 +17,7 @@ import { ReviewProvider } from "./context/ReviewContext";
 
 function AppContent() {
   const location = useLocation();
-  const hideNavFooter = ["/owner-dashboard", "/admin-dashboard"].includes(location.pathname);
+  const hideNavFooter = ["/admin-dashboard"].includes(location.pathname);
 
   return (
     <>
@@ -33,7 +32,6 @@ function AppContent() {
         <Route path="/login" element={<Login />} />
         <Route path="/bookings" element={<Dashboard />} />
         <Route path="/favorites" element={<Favorites />} />
-        <Route path="/owner-dashboard" element={<OwnerDashboard />} />
         <Route path="/admin-dashboard" element={<AdminDashboard />} />
         <Route path="/payment/success" element={<PaymentSuccess />} />
         <Route path="/payment/failure" element={<PaymentFailure />} />

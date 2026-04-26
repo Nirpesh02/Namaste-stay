@@ -147,7 +147,7 @@ User {
   emailVerified: Boolean,
   emailVerificationCode: String,
   emailVerificationExpiresAt: Date,
-  accountType: String (user|owner),
+  accountType: String (user|admin),
   authProvider: String (email|google),
   createdAt: Date,
   updatedAt: Date

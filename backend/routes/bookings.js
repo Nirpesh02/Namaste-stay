@@ -1,7 +1,7 @@
 import express from 'express';
 import Booking from '../models/Booking.js';
 import Hotel from '../models/Hotel.js';
-import { authenticateToken, requireAdmin, requireOwnerOrAdmin } from '../middleware/auth.js';
+import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -207,51 +207,6 @@ router.get('/all', authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
-// GET /api/bookings/owner - Get all bookings for an owner's hotels
-// Excludes awaiting_payment by default
-router.get('/owner', authenticateToken, requireOwnerOrAdmin, async (req, res) => {
-  try {
-    const { page = 1, limit = 50, status } = req.query;
-
-    // First find all hotels owned by this user
-    const ownerHotels = await Hotel.find({ owner: req.user._id }).select('_id');
-    const hotelIds = ownerHotels.map(h => h._id);
-
-    const filter = { hotel: { $in: hotelIds } };
-    if (status) {
-      filter.status = status;
-    } else {
-      filter.status = { $nin: ['awaiting_payment', 'failed'] };
-    }
-
-    const pageNum = Math.max(1, parseInt(page));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
-    const skip = (pageNum - 1) * limitNum;
-
-    const [bookings, totalCount] = await Promise.all([
-      Booking.find(filter)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limitNum)
-        .populate('user', 'name email')
-        .populate('hotel', 'name district'),
-      Booking.countDocuments(filter),
-    ]);
-
-    res.json({
-      success: true,
-      bookings,
-      pagination: {
-        currentPage: pageNum,
-        totalPages: Math.ceil(totalCount / limitNum),
-        totalItems: totalCount,
-      },
-    });
-  } catch (error) {
-    res.status(500).json({ message: 'Error fetching owner bookings', error: error.message });
-  }
-});
-
 // GET /api/bookings/:id - Get single booking
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
@@ -263,17 +218,12 @@ router.get('/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ message: 'Booking not found' });
     }
 
-    // Only allow own booking, admin, or hotel owner
+    // Only allow own booking or admin
     const role = req.user.role || req.user.accountType;
     let isAuthorized = false;
 
     if (role === 'admin' || String(booking.user._id) === String(req.user._id)) {
       isAuthorized = true;
-    } else if (role === 'owner') {
-      const hotel = await Hotel.findById(booking.hotel);
-      if (hotel && String(hotel.owner) === String(req.user._id)) {
-        isAuthorized = true;
-      }
     }
 
     if (!isAuthorized) {
@@ -300,11 +250,6 @@ router.put('/:id/cancel', authenticateToken, async (req, res) => {
 
     if (role === 'admin' || String(booking.user) === String(req.user._id)) {
       isAuthorized = true;
-    } else if (role === 'owner') {
-      const hotel = await Hotel.findById(booking.hotel);
-      if (hotel && String(hotel.owner) === String(req.user._id)) {
-        isAuthorized = true;
-      }
     }
 
     if (!isAuthorized) {

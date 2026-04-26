@@ -6,7 +6,6 @@ const footerLinks = [
     title: "Company",
     links: [
       { label: "About Us", action: "about" },
-      { label: "List Your Property", action: "owner-dashboard" },
       { label: "Careers", action: "careers" },
       { label: "Press", action: "press" }
     ]
@@ -38,9 +37,6 @@ export default function Footer() {
     // Navigate to specific pages
     window.scrollTo(0, 0);
     switch(action) {
-      case "owner-dashboard":
-        navigate("/owner-dashboard");
-        break;
       case "districts":
         navigate("/districts");
         break;

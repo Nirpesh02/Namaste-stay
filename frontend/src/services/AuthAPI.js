@@ -193,13 +193,6 @@ class AuthAPI {
     });
   }
 
-  static async getOwnerBookings(token, params = {}) {
-    const queryString = new URLSearchParams(params).toString();
-    return safeRequest(`/bookings/owner${queryString ? '?' + queryString : ''}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-  }
-
   static async deleteIncompleteBooking(token, bookingId) {
     return safeRequest(`/bookings/${bookingId}/incomplete`, {
       method: 'DELETE',

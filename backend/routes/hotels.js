@@ -1,6 +1,6 @@
 import express from 'express';
 import Hotel from '../models/Hotel.js';
-import { authenticateToken, requireAdmin, requireOwnerOrAdmin } from '../middleware/auth.js';
+import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -100,8 +100,8 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/hotels - Create hotel (admin or owner)
-router.post('/', authenticateToken, requireOwnerOrAdmin, async (req, res) => {
+// POST /api/hotels - Create hotel (admin)
+router.post('/', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const {
       name,
@@ -156,8 +156,8 @@ router.post('/', authenticateToken, requireOwnerOrAdmin, async (req, res) => {
   }
 });
 
-// PUT /api/hotels/:id - Update hotel (admin or owner)
-router.put('/:id', authenticateToken, requireOwnerOrAdmin, async (req, res) => {
+// PUT /api/hotels/:id - Update hotel (admin)
+router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const hotel = await Hotel.findById(req.params.id);
 
@@ -195,8 +195,8 @@ router.put('/:id', authenticateToken, requireOwnerOrAdmin, async (req, res) => {
   }
 });
 
-// DELETE /api/hotels/:id - Delete hotel (admin or owner)
-router.delete('/:id', authenticateToken, requireOwnerOrAdmin, async (req, res) => {
+// DELETE /api/hotels/:id - Delete hotel (admin)
+router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const hotel = await Hotel.findById(req.params.id);
 

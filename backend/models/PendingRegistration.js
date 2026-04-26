@@ -21,7 +21,7 @@ const pendingRegistrationSchema = new mongoose.Schema({
   },
   accountType: {
     type: String,
-    enum: ['user', 'owner'],
+    enum: ['user', 'admin'],
     default: 'user',
   },
   verificationCode: {

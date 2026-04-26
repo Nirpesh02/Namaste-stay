@@ -45,20 +45,3 @@ export const requireAdmin = async (req, res, next) => {
     res.status(500).json({ message: 'Authorization error', error: error.message });
   }
 };
-
-export const requireOwnerOrAdmin = async (req, res, next) => {
-  try {
-    if (!req.user) {
-      return res.status(401).json({ message: 'Authentication required' });
-    }
-
-    const role = req.user.role || req.user.accountType;
-    if (!['admin', 'owner'].includes(role)) {
-      return res.status(403).json({ message: 'Owner or admin access required' });
-    }
-
-    next();
-  } catch (error) {
-    res.status(500).json({ message: 'Authorization error', error: error.message });
-  }
-};

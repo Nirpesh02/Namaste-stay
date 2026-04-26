@@ -33,12 +33,12 @@ const userSchema = new mongoose.Schema({
   },
   accountType: {
     type: String,
-    enum: ['user', 'owner', 'admin'],
+    enum: ['user', 'admin'],
     default: 'user',
   },
   role: {
     type: String,
-    enum: ['user', 'owner', 'admin'],
+    enum: ['user', 'admin'],
     default: 'user',
   },
   emailVerified: {

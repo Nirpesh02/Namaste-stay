@@ -27,7 +27,7 @@ export default function Login() {
   const [verificationStep, setVerificationStep] = useState(false);
   const [banner, setBanner] = useState(null);
 
-  const destination = userType === "owner" ? "/owner-dashboard" : userType === "admin" ? "/admin-dashboard" : "/";
+  const destination = userType === "admin" ? "/admin-dashboard" : "/";
 
   const showBanner = (type, title, message) => {
     setBanner({ type, title, message });
@@ -210,19 +210,6 @@ export default function Login() {
                     <p className="text-sm text-gray-600 mt-1">Book stays and manage reservations</p>
                   </div>
                   <ArrowRight className="text-red-600 group-hover:translate-x-1 transition-transform" />
-                </div>
-              </button>
-
-              <button
-                onClick={() => setUserType("owner")}
-                className="w-full p-6 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all text-left group"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-900 group-hover:text-blue-600">Owner/Property Manager</h3>
-                    <p className="text-sm text-gray-600 mt-1">Manage hotels and view bookings</p>
-                  </div>
-                  <ArrowRight className="text-blue-600 group-hover:translate-x-1 transition-transform" />
                 </div>
               </button>
 
@@ -524,114 +511,6 @@ export default function Login() {
 
           <div className="mt-6 text-center">
             <a href="/" className="text-red-600 hover:text-red-700 font-semibold text-sm">
-              ← Back to Home
-            </a>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (userType === "owner") {
-    return (
-      <div className="min-h-screen bg-linear-to-br from-blue-50 via-white to-blue-50 flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md">
-          <div className="bg-white rounded-2xl shadow-2xl p-8 space-y-6">
-            <div className="text-center space-y-2">
-              <h1 className="text-3xl font-bold text-gray-900">Property Owner Login</h1>
-              <p className="text-gray-600 text-sm">Manage your hotels and bookings</p>
-            </div>
-
-            <div className="flex justify-center">
-              <div className="text-center">
-                <h2 className="text-3xl font-black text-blue-700">Namaste Stay</h2>
-                <p className="text-xs text-blue-600 font-semibold">Partners</p>
-              </div>
-            </div>
-
-            {banner && <Alert type={banner.type} title={banner.title} message={banner.message} onDismiss={clearBanner} />}
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-200" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-              </div>
-            </div>
-
-            
-
-            <form onSubmit={handleEmailLogin} className="space-y-4">
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Email Address</label>
-                <div className="relative">
-                  <Mail size={18} className="absolute left-3 top-3 text-gray-400" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="owner@hotel.com"
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Password</label>
-                <div className="relative">
-                  <Lock size={18} className="absolute left-3 top-3 text-gray-400" />
-                  <input
-                    type="password"
-                    value={signInPassword}
-                    onChange={(e) => setSignInPassword(e.target.value)}
-                    placeholder="Your password"
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full px-6 py-3 bg-linear-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <Loader size={18} className="animate-spin" />
-                    <span>Signing in...</span>
-                  </>
-                ) : (
-                  <span>Sign in with Email</span>
-                )}
-              </button>
-            </form>
-
-
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-xs text-blue-800">
-              <p className="font-semibold mb-2">Property Owner Benefits:</p>
-              <ul className="list-disc list-inside space-y-1 text-blue-700">
-                <li>List and manage multiple properties</li>
-                <li>Track guest bookings and payments</li>
-                <li>Respond to guest reviews</li>
-                <li>Access performance analytics</li>
-              </ul>
-            </div>
-
-            <button
-              onClick={() => {
-                setUserType(null);
-                clearBanner();
-                resetSignInFields();
-              }}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-semibold hover:bg-gray-50"
-            >
-              ← Back
-            </button>
-          </div>
-
-          <div className="mt-6 text-center">
-            <a href="/" className="text-blue-600 hover:text-blue-700 font-semibold text-sm">
               ← Back to Home
             </a>
           </div>
