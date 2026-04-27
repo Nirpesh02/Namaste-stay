@@ -78,8 +78,8 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
     ] = await Promise.all([
       User.countDocuments({ accountType: { $ne: 'admin' } }),
       Hotel.countDocuments(),
-      // Total bookings = confirmed + awaiting payment (all real user bookings)
-      Booking.countDocuments({ status: { $in: ['confirmed', 'awaiting_payment'] } }),
+      // Total bookings = confirmed + completed + awaiting payment (all real user bookings)
+      Booking.countDocuments({ status: { $in: ['confirmed', 'awaiting_payment', 'completed'] } }),
       Booking.countDocuments({ status: 'confirmed' }),
       Booking.countDocuments({ status: 'cancelled' }),
       Booking.countDocuments({ status: 'awaiting_payment' }),

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { LogOut, LayoutGrid, Home, Calendar, Users, Settings, Plus, X, Trash2, Edit, Eye, EyeOff, Menu, ArrowLeft, TrendingUp, DollarSign, CheckCircle, XCircle, Loader } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
@@ -26,7 +26,6 @@ function BarChart({ data, label, color }) {
 // Simple Pie/Donut Chart
 function DonutChart({ segments }) {
   const total = segments.reduce((s, seg) => s + seg.value, 0) || 1;
-  let cumulative = 0;
   const size = 160;
   const stroke = 28;
   const radius = (size - stroke) / 2;
@@ -37,8 +36,7 @@ function DonutChart({ segments }) {
       <svg width={size} height={size} className="transform -rotate-90">
         {segments.map((seg, i) => {
           const pct = seg.value / total;
-          const offset = cumulative * circumference;
-          cumulative += pct;
+          const offset = segments.slice(0, i).reduce((sum, s) => sum + (s.value / total), 0) * circumference;
           return (
             <circle key={i} cx={size/2} cy={size/2} r={radius} fill="none"
               stroke={seg.color} strokeWidth={stroke}
@@ -76,7 +74,6 @@ export default function AdminDashboard() {
   const [hotels, setHotels] = useState([]);
   const [showAddHotel, setShowAddHotel] = useState(false);
   const [newHotel, setNewHotel] = useState({ name: "", price: "", district: "", province: "", description: "" });
-  const [editingHotel, setEditingHotel] = useState(null);
 
   // Bookings
   const [allBookings, setAllBookings] = useState([]);
@@ -88,14 +85,7 @@ export default function AdminDashboard() {
   const [pwForm, setPwForm] = useState({ current: "", new: "", confirm: "" });
   const [pwMsg, setPwMsg] = useState("");
 
-  useEffect(() => {
-    if (!user || !isAdmin) { navigate("/login"); return; }
-    loadDashboard();
-  }, [user, isAdmin]);
-
-  useEffect(() => { setSidebarOpen(false); window.scrollTo(0,0); }, [activeTab]);
-
-  const loadDashboard = async () => {
+  const loadDashboard = useCallback(async () => {
     setLoading(true);
     try {
       const [dashRes, hotelsRes] = await Promise.all([
@@ -111,17 +101,24 @@ export default function AdminDashboard() {
       if (hotelsRes.success) setHotels(hotelsRes.hotels || []);
     } catch (e) { console.error(e); }
     setLoading(false);
-  };
+  }, [token]);
 
-  const loadBookings = async () => {
+  const loadBookings = useCallback(async () => {
     const res = await AuthAPI.getAllBookings(token, { limit: 100 });
     if (res.success) setAllBookings(res.bookings || []);
-  };
+  }, [token]);
 
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     const res = await AuthAPI.getAdminUsers(token);
     if (res.success) setUsers(res.users || []);
-  };
+  }, [token]);
+
+  useEffect(() => {
+    if (!user || !isAdmin) { navigate("/login"); return; }
+    loadDashboard();
+  }, [user, isAdmin, navigate, loadDashboard]);
+
+  useEffect(() => { setSidebarOpen(false); window.scrollTo(0,0); }, [activeTab]);
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
@@ -244,7 +241,7 @@ export default function AdminDashboard() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {[
                     { label: "Total Bookings", value: stats.totalBookings, icon: Calendar, color: "bg-blue-100 text-blue-600" },
-                    { label: "Total Revenue", value: `NPR ${stats.totalRevenue?.toLocaleString() || 0}`, icon: DollarSign, color: "bg-green-100 text-green-600" },
+                    { label: "Total Revenue", value: `NPR ${stats.totalRevenue?.toLocaleString() || 0}`, icon: () => <span className="font-bold">Rs</span>, color: "bg-green-100 text-green-600" },
                     { label: "Total Users", value: stats.totalUsers, icon: Users, color: "bg-purple-100 text-purple-600" },
                     { label: "Total Hotels", value: stats.totalHotels, icon: Home, color: "bg-orange-100 text-orange-600" },
                   ].map((card, i) => (
